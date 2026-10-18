@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ops
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/scripts/create-test-db.sql:/docker-entrypoint-initdb.d/create-test-db.sql:ro
+    healthcheck:
+      # -h forces a TCP check. During first-time init the image runs a temporary server on the Unix socket
+      # only, so a socket check can pass before init (including create-test-db.sql) has finished.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d ops"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/ops
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-in-production-please}
+    ports: ["8000:8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    # Healthy once migrations and the seed have run and uvicorn is serving (the first seed takes ~30 s).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 180s
+
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/ops
+    depends_on:
+      # Wait for the API to finish migrating; otherwise the worker polls tables that don't exist yet.
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    ports: ["5173:80"]
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  pgdata:

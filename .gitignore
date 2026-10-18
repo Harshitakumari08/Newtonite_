@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build and distribution output
+dist/
+build/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment secrets & local configurations
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Python virtual environment, caches & test artifacts
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Operating system files
+.DS_Store
+Thumbs.db
